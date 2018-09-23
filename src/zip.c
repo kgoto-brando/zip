@@ -121,6 +121,7 @@ struct zip_entry_t {
   mz_zip_writer_add_state state;
   tdefl_compressor comp;
   mz_uint32 external_attr;
+  mz_uint16 dos_date, dos_time;
 };
 
 struct zip_t {
@@ -203,6 +204,14 @@ int zip_entry_open(struct zip_t *zip, const char *entryname) {
   mz_zip_archive *pzip = NULL;
   mz_uint num_alignment_padding_bytes, level;
   mz_zip_archive_file_stat stats;
+  time_t t;
+#if defined(_MSC_VER) || defined(_WIN32) || defined(__WIN32__) ||              \
+    defined(__MINGW32__)
+  struct tm tmb, *tm = (struct tm *)&tmb;
+#else
+  struct tm *tm;
+#endif
+
 
   if (!zip || !entryname) {
     return -1;
@@ -249,6 +258,7 @@ int zip_entry_open(struct zip_t *zip, const char *entryname) {
     zip->entry.header_offset = stats.m_local_header_ofs;
     zip->entry.method = stats.m_method;
     zip->entry.external_attr = stats.m_external_attr;
+    mz_zip_time_to_dos_time(stats.m_time, &zip->entry.dos_time, &zip->entry.dos_date);
 
     return 0;
   }
@@ -318,6 +328,21 @@ int zip_entry_open(struct zip_t *zip, const char *entryname) {
       goto cleanup;
     }
   }
+
+  t = time(NULL);
+#ifdef __STDC_LIB_EXT1__
+  tm = localtime_s(&t, tm);
+#else
+  tm = localtime(&t);
+#endif
+  if (!tm) {
+    goto cleanup;
+  }
+
+  zip->entry.dos_time = (mz_uint16)(((tm->tm_hour) << 11) + ((tm->tm_min) << 5) +
+                         ((tm->tm_sec) >> 1));
+  zip->entry.dos_date = (mz_uint16)(((tm->tm_year + 1900 - 1980) << 9) +
+                         ((tm->tm_mon + 1) << 5) + tm->tm_mday);
 
   return 0;
 
@@ -389,6 +414,7 @@ int zip_entry_openbyindex(struct zip_t *zip, int index) {
   zip->entry.header_offset = stats.m_local_header_ofs;
   zip->entry.method = stats.m_method;
   zip->entry.external_attr = stats.m_external_attr;
+  mz_zip_time_to_dos_time(stats.m_time, &zip->entry.dos_time, &zip->entry.dos_date);
 
   return 0;
 }
@@ -398,16 +424,7 @@ int zip_entry_close(struct zip_t *zip) {
   mz_uint level;
   tdefl_status done;
   mz_uint16 entrylen;
-  time_t t;
-  mz_uint16 dos_time, dos_date;
   int status = -1;
-
-#if defined(_MSC_VER) || defined(_WIN32) || defined(__WIN32__) ||              \
-    defined(__MINGW32__)
-  struct tm tmb, *tm = (struct tm *)&tmb;
-#else
-  struct tm *tm;
-#endif
 
   if (!zip) {
     // zip_t handler is not initialized
@@ -433,22 +450,6 @@ int zip_entry_close(struct zip_t *zip) {
   }
 
   entrylen = (mz_uint16)strlen(zip->entry.name);
-  t = time(NULL);
-
-#ifdef __STDC_LIB_EXT1__
-  tm = localtime_s(&t, tm);
-#else
-  tm = localtime(&t);
-#endif
-  if (!tm) {
-    goto cleanup;
-  }
-
-  dos_time = (mz_uint16)(((tm->tm_hour) << 11) + ((tm->tm_min) << 5) +
-                         ((tm->tm_sec) >> 1));
-  dos_date = (mz_uint16)(((tm->tm_year + 1900 - 1980) << 9) +
-                         ((tm->tm_mon + 1) << 5) + tm->tm_mday);
-
   // no zip64 support yet
   if ((zip->entry.comp_size > 0xFFFFFFFF) || (zip->entry.offset > 0xFFFFFFFF)) {
     // No zip64 support, yet
@@ -458,7 +459,7 @@ int zip_entry_close(struct zip_t *zip) {
   if (!mz_zip_writer_create_local_dir_header(
           pzip, zip->entry.header, entrylen, 0, zip->entry.uncomp_size,
           zip->entry.comp_size, zip->entry.uncomp_crc32, zip->entry.method, 0,
-          dos_time, dos_date)) {
+          zip->entry.dos_time, zip->entry.dos_date)) {
     // Cannot create zip entry header
     goto cleanup;
   }
@@ -473,7 +474,7 @@ int zip_entry_close(struct zip_t *zip) {
   if (!mz_zip_writer_add_to_central_dir(
           pzip, zip->entry.name, entrylen, NULL, 0, "", 0,
           zip->entry.uncomp_size, zip->entry.comp_size, zip->entry.uncomp_crc32,
-          zip->entry.method, 0, dos_time, dos_date, zip->entry.header_offset,
+          zip->entry.method, 0, zip->entry.dos_time, zip->entry.dos_date, zip->entry.header_offset,
           zip->entry.external_attr)) {
     // Cannot write to zip central dir
     goto cleanup;
@@ -592,6 +593,7 @@ int zip_entry_fwrite(struct zip_t *zip, const char *filename) {
     zip->entry.external_attr |= 0x01;
   }
   zip->entry.external_attr |= (mz_uint32)((file_stat.st_mode & 0xFFFF) << 16);
+  mz_zip_time_to_dos_time(file_stat.st_mtime, &zip->entry.dos_time, &zip->entry.dos_date);
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
   if (fopen_s(&stream, filename, "rb"))
