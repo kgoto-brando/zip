@@ -419,6 +419,7 @@ static void test_mtime(void) {
   remove(WFILE);
   assert(0 == zip_extract(ZIPNAME, ".", NULL, NULL));
   assert(0 == MZ_FILE_STAT(filename, &file_stat2));
+  fprintf(stdout, "file_stat1.st_mtime: %lu\nfile_stat2.st_mtime: %lu\n", file_stat1.st_mtime, file_stat2.st_mtime);
   assert(file_stat1.st_mtime == file_stat2.st_mtime);
 
   remove(WFILE);
