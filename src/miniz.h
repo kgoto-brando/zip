@@ -5354,8 +5354,10 @@ mz_bool mz_zip_reader_extract_to_file(mz_zip_archive *pZip, mz_uint file_index,
   if (MZ_FCLOSE(pFile) == EOF)
     return MZ_FALSE;
 #ifndef MINIZ_NO_TIME
-  if (status)
+  if (status) {
+    fprintf(stdout, "mz_zip_reader_extract_to_file: file_stat.m_time: %lu\n", file_stat.m_time);
     mz_zip_set_file_times(pDst_filename, file_stat.m_time, file_stat.m_time);
+  }
 #endif
 
   return status;
