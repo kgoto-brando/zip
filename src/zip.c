@@ -595,6 +595,10 @@ int zip_entry_fwrite(struct zip_t *zip, const char *filename) {
   zip->entry.external_attr |= (mz_uint32)((file_stat.st_mode & 0xFFFF) << 16);
   mz_zip_time_to_dos_time(file_stat.st_mtime, &zip->entry.dos_time, &zip->entry.dos_date);
 
+  time_t tmp = mz_zip_dos_to_time_t(zip->entry.dos_time, zip->entry.dos_date);
+  printf("zip_entry_fwrite: mz_zip_time_to_dos_time: file_stat.st_mtime: %lu, time_t: %lu\n", file_stat.st_mtime, tmp);
+
+
 #if defined(_MSC_VER) || defined(__MINGW32__)
   if (fopen_s(&stream, filename, "rb"))
 #else
