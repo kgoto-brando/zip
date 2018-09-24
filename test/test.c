@@ -406,15 +406,14 @@ static void test_mtime(void) {
   fwrite(TESTDATA1, sizeof(char), strlen(TESTDATA1), stream);
   assert(0 == fclose(stream));
 
-  assert(0 == MZ_FILE_STAT(filename, &file_stat1));
-
   zip = zip_open(ZIPNAME, 9, 'w');
   assert(zip != NULL);
   assert(0 == zip_entry_open(zip, WFILE));
   assert(0 == zip_entry_fwrite(zip, WFILE));
   assert(0 == zip_entry_close(zip));
-
   zip_close(zip);
+
+  assert(0 == MZ_FILE_STAT(filename, &file_stat1));
 
   remove(WFILE);
   assert(0 == zip_extract(ZIPNAME, ".", NULL, NULL));
